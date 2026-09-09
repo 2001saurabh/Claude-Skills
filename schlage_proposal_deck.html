@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Schlage — GA4, GTM & Tracking Governance Audit</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:   #0a1628; --navy2: #0d1f3c;
+    --accent: #2563eb; --bright: #3b82f6; --gold: #f59e0b;
+    --green:  #10b981; --white: #ffffff;
+    --muted:  #94a3b8; --border: rgba(255,255,255,0.12);
+  }
+  body { font-family:'Inter',sans-serif; background:#111827; display:flex; flex-direction:column; align-items:center; min-height:100vh; overflow:hidden; }
+
+  /* CONTROLS */
+  .controls { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:14px; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.15); border-radius:50px; padding:10px 24px; z-index:1000; }
+  .controls button { background:var(--accent); color:#fff; border:none; border-radius:50%; width:38px; height:38px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:background .2s; }
+  .controls button:hover { background:var(--bright); }
+  .controls button:disabled { background:#333; cursor:not-allowed; }
+  .slide-counter { color:var(--muted); font-size:14px; font-weight:500; min-width:60px; text-align:center; }
+
+  /* DECK */
+  .deck { width:100vw; height:100vh; position:relative; overflow:hidden; }
+  .slide { position:absolute; inset:0; width:100%; height:100%; display:none !important; flex-direction:column; overflow:hidden; }
+  .slide.active { display:flex !important; }
+
+  /* DOTS */
+  .progress-dots { position:fixed; right:22px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:8px; z-index:1000; }
+  .dot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,0.2); cursor:pointer; transition:all .2s; }
+  .dot.active { background:var(--accent); transform:scale(1.35); }
+  .dot:hover { background:rgba(255,255,255,0.5); }
+
+  /* SHARED LABELS */
+  .label { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#bfdbfe; margin-bottom:12px; }
+  .label-light { color:#1d4ed8; }
+
+  code    { font-size:12px; background:rgba(255,255,255,0.12); padding:2px 8px; border-radius:4px; color:#93c5fd; font-family:monospace; }
+  code.d  { background:#e2e8f0; color:#1e3a5f; }
+
+  /* ── BACKGROUNDS ──────────────────────────── */
+  .s-cover { background:var(--navy);  justify-content:center; padding:56px 80px; }
+  .s-light { background:#f8fafc;      padding:44px 68px; }
+  .s-dark  { background:var(--navy2); padding:40px 60px; }
+  .s-navy  { background:var(--navy);  padding:40px 60px; }
+  .s-table { background:#f8fafc;      padding:38px 60px; }
+  .s-dim   { background:var(--navy2); padding:26px 48px; }
+  .s-flow  { background:var(--navy);  padding:30px 54px; }
+
+  /* LIGHT BG H2 */
+  .s-light h2, .s-table h2 { font-size:clamp(22px,2.8vw,38px); font-weight:800; color:#0a1628; margin-bottom:8px; }
+  .s-light .sub, .s-table .sub { font-size:13px; color:#64748b; margin-bottom:22px; font-style:italic; }
+
+  /* DARK BG H2 */
+  .s-dark h2, .s-navy h2, .s-dim h2, .s-flow h2 { font-size:clamp(22px,2.8vw,36px); font-weight:800; color:#f1f5f9; margin-bottom:6px; }
+  .s-dark .sub, .s-navy .sub, .s-flow .sub { font-size:13px; color:#94a3b8; margin-bottom:20px; font-style:italic; max-width:860px; line-height:1.55; }
+
+  /* ── COVER ─────────────────────────────────── */
+  .cover-accent { position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--accent); }
+  .cover-tags { display:flex; gap:8px; margin-bottom:28px; }
+  .tag { background:rgba(37,99,235,0.22); border:1px solid rgba(37,99,235,0.45); color:#93c5fd; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; padding:5px 14px; border-radius:4px; }
+  .s-cover h1 { font-size:clamp(32px,4.5vw,58px); font-weight:800; color:#fff; line-height:1.15; max-width:840px; margin-bottom:18px; }
+  .s-cover h1 span { color:#60a5fa; }
+  .divider { width:56px; height:3px; background:var(--accent); margin-bottom:28px; border-radius:2px; }
+  .cover-sub { font-size:clamp(14px,1.4vw,18px); color:#94a3b8; font-weight:300; max-width:580px; line-height:1.6; margin-bottom:40px; }
+  .cover-meta { display:flex; gap:44px; flex-wrap:wrap; }
+  .meta-item .ml { font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#64748b; margin-bottom:4px; }
+  .meta-item .mv { font-size:15px; color:#e2e8f0; font-weight:500; }
+
+  /* ── AGENDA ─────────────────────────────────── */
+  .agenda-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .agenda-item { background:#fff; border:1px solid #e2e8f0; border-left:4px solid var(--accent); border-radius:8px; padding:16px 20px; display:flex; align-items:flex-start; gap:14px; }
+  .agenda-num { background:var(--accent); color:#fff; font-size:13px; font-weight:700; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .agenda-text strong { display:block; font-size:14px; font-weight:700; color:#0a1628; margin-bottom:4px; }
+  .agenda-text span { font-size:12.5px; color:#64748b; line-height:1.5; }
+
+  /* ── STATS / GLANCE ─────────────────────────── */
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .stat-box { background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:10px; padding:18px 14px; text-align:center; }
+  .stat-num { font-size:clamp(28px,3.8vw,46px); font-weight:800; color:#60a5fa; line-height:1; margin-bottom:6px; }
+  .stat-lbl { font-size:13px; color:#94a3b8; font-weight:500; line-height:1.4; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .glance-box { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+  .glance-box.hl { background:rgba(37,99,235,0.14); border-color:rgba(37,99,235,0.38); }
+  .glance-box h4 { font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#93c5fd; margin-bottom:12px; }
+  .glance-box ul { list-style:none; }
+  .glance-box ul li { font-size:13px; color:#cbd5e1; padding:5px 0 5px 16px; position:relative; line-height:1.55; }
+  .glance-box ul li::before { content:'→'; position:absolute; left:0; color:#60a5fa; font-size:11px; top:7px; }
+
+  /* ── PROBLEM / SOLUTION ─────────────────────── */
+  .ps-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:18px; align-items:start; flex:1; }
+  .prob-col, .sol-col { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .sol-col { background:rgba(37,99,235,0.12); border-color:rgba(37,99,235,0.35); }
+  .col-title { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
+  .prob-col .col-title { color:#fca5a5; }
+  .sol-col  .col-title { color:#6ee7b7; }
+  .ps-item { display:flex; align-items:flex-start; gap:9px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.07); font-size:13px; color:#cbd5e1; line-height:1.55; }
+  .ps-item:last-child { border-bottom:none; }
+  .psdot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:6px; }
+  .prob-col .psdot { background:#f87171; }
+  .sol-col  .psdot { background:#34d399; }
+  .arrow-mid { display:flex; align-items:center; justify-content:center; padding-top:80px; }
+  .arrow-circle { width:46px; height:46px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff; }
+  .quote-bar { background:rgba(37,99,235,0.12); border-left:4px solid var(--accent); border-radius:0 8px 8px 0; padding:13px 20px; margin-top:18px; font-size:13px; color:#94a3b8; font-style:italic; line-height:1.65; }
+
+  /* ── TABLE SLIDE ────────────────────────────── */
+  .prop-table { width:100%; border-collapse:collapse; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+  .prop-table thead tr { background:#0a1628; }
+  .prop-table thead th { padding:13px 16px; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#94a3b8; text-align:left; }
+  .prop-table tbody tr { background:#fff; border-bottom:1px solid #f1f5f9; }
+  .prop-table tbody tr:hover { background:#f0f7ff; }
+  .prop-table tbody tr.primary-row { background:#eff6ff; }
+  .prop-table td { padding:13px 16px; font-size:14px; color:#334155; font-weight:500; }
+  .phase-badge { width:28px; height:28px; background:var(--accent); color:#fff; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .phase-badge.gold { background:var(--gold); }
+  .phase-badge.tbd  { background:#94a3b8; font-size:15px; }
+  .pill { display:inline-block; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
+  .pill.primary { background:#dbeafe; color:#1d4ed8; }
+  .pill.high    { background:#d1fae5; color:#065f46; }
+  .pill.poc     { background:#fef3c7; color:#92400e; }
+  .why-box { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .why-item { background:#fff; border:1px solid #e2e8f0; border-left:4px solid var(--accent); border-radius:8px; padding:14px 18px; }
+  .why-item strong { display:block; font-size:13.5px; font-weight:700; color:#0a1628; margin-bottom:4px; }
+  .why-item span   { font-size:12.5px; color:#64748b; line-height:1.55; }
+
+  /* ── DIMENSIONS ─────────────────────────────── */
+  .dim-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
+  .dim-card { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:13px 15px; }
+  .dim-hdr { display:flex; align-items:center; gap:9px; margin-bottom:8px; }
+  .dim-icon { width:30px; height:30px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+  .ic-blue   { background:rgba(37,99,235,0.28); }
+  .ic-green  { background:rgba(16,185,129,0.22); }
+  .ic-gold   { background:rgba(245,158,11,0.22); }
+  .ic-red    { background:rgba(239,68,68,0.22); }
+  .ic-purple { background:rgba(139,92,246,0.22); }
+  .ic-teal   { background:rgba(20,184,166,0.22); }
+  .dim-card h4 { font-size:13px; font-weight:700; color:#f1f5f9; }
+  .dim-card p  { font-size:11.5px; color:#94a3b8; line-height:1.45; }
+  .dim-key     { margin-top:8px; font-size:11px; color:#93c5fd; font-style:italic; line-height:1.4; }
+  .dim-bonus { background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.28); border-radius:10px; padding:12px 18px; display:flex; align-items:center; gap:16px; }
+  .dim-bonus-lbl { font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#fcd34d; white-space:nowrap; flex-shrink:0; }
+  .dim-bonus p   { font-size:12px; color:#94a3b8; line-height:1.5; }
+
+  /* ── FLOW SLIDE ─────────────────────────────── */
+  .flows-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .flow-box { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px 20px; }
+  .flow-box.fa { border-top:3px solid var(--gold); }
+  .flow-box.fb { border-top:3px solid var(--green); }
+  .flow-hdr { display:flex; align-items:center; gap:12px; margin-bottom:11px; }
+  .flow-badge { font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:4px 11px; border-radius:4px; }
+  .flow-badge.a { background:rgba(245,158,11,0.2); color:#fcd34d; }
+  .flow-badge.b { background:rgba(16,185,129,0.2); color:#6ee7b7; }
+  .flow-hdr h4 { font-size:14px; font-weight:700; color:#f1f5f9; }
+  .flow-products { font-size:12px; color:#94a3b8; margin-bottom:11px; font-style:italic; }
+  .flow-steps { display:flex; flex-direction:column; gap:6px; margin-bottom:11px; }
+  .flow-step { display:flex; align-items:flex-start; gap:9px; font-size:12.5px; color:#cbd5e1; line-height:1.5; }
+  .step-num { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; margin-top:1px; }
+  .step-a { background:rgba(245,158,11,0.3); color:#fcd34d; }
+  .step-b { background:rgba(16,185,129,0.3); color:#6ee7b7; }
+  .flow-warn { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:9px 14px; font-size:12px; color:#fca5a5; line-height:1.55; }
+  .flow-warn strong { color:#f87171; }
+  .flow-tip  { background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:8px; padding:9px 14px; font-size:12px; color:#6ee7b7; line-height:1.55; margin-top:8px; }
+  .flow-tip strong { color:#34d399; }
+  .flow-poc  { background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:9px 14px; font-size:12px; color:#fde68a; line-height:1.55; margin-top:8px; }
+  .flow-poc strong { color:#fcd34d; }
+
+  /* ── GOVERNANCE ─────────────────────────────── */
+  .gov-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .gov-col h3 { font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px; }
+  .gov-in h3  { color:#60a5fa; }
+  .gov-out h3 { color:#f87171; }
+  .gov-item { background:#fff; border:1px solid #e2e8f0; border-left:4px solid var(--accent); border-radius:8px; padding:13px 16px; margin-bottom:10px; }
+  .gov-item strong { display:block; font-size:14px; font-weight:700; color:#0a1628; margin-bottom:4px; }
+  .gov-item span   { font-size:12.5px; color:#64748b; line-height:1.55; }
+  .oos-table { background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; }
+  .oos-row { display:flex; padding:10px 16px; border-bottom:1px solid #f1f5f9; gap:14px; align-items:flex-start; }
+  .oos-row:last-child { border-bottom:none; }
+  .oos-lbl { font-size:13px; font-weight:700; color:#0a1628; min-width:210px; flex-shrink:0; }
+  .oos-why { font-size:12px; color:#64748b; line-height:1.55; }
+
+  /* ── DEVOPS WORKFLOW ─────────────────────────── */
+  .workflow { display:flex; gap:0; margin-bottom:22px; align-items:stretch; }
+  .wf-step { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:10px; padding:16px 14px; text-align:center; position:relative; }
+  .wf-step:not(:last-child)::after { content:'→'; position:absolute; right:-14px; top:50%; transform:translateY(-50%); color:#60a5fa; font-size:20px; z-index:1; }
+  .wf-step + .wf-step { margin-left:10px; }
+  .wf-icon { width:38px; height:38px; background:rgba(37,99,235,0.25); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin:0 auto 10px; }
+  .wf-step h4 { font-size:13.5px; font-weight:700; color:#f1f5f9; margin-bottom:6px; }
+  .wf-step p  { font-size:11.5px; color:#94a3b8; line-height:1.5; }
+  .jira-quote { background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.28); border-left:4px solid var(--accent); border-radius:0 10px 10px 0; padding:14px 20px; font-size:13px; color:#94a3b8; font-style:italic; line-height:1.7; }
+
+  /* ── TIMELINE ───────────────────────────────── */
+  .phase-track { display:flex; gap:0; margin-bottom:22px; align-items:flex-start; }
+  .phase-node { flex:1; text-align:center; position:relative; }
+  .phase-node:not(:last-child)::after { content:''; position:absolute; top:18px; right:-50%; width:100%; height:2px; background:#cbd5e1; z-index:0; }
+  .phase-circle { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; margin:0 auto 10px; position:relative; z-index:1; }
+  .pc-active   { background:var(--accent); box-shadow:0 0 0 4px rgba(37,99,235,0.22); }
+  .pc-upcoming { background:#cbd5e1; }
+  .pc-poc      { background:var(--gold); }
+  .pc-synth    { background:#8b5cf6; }
+  .pname { font-size:13px; font-weight:700; color:#0a1628; margin-bottom:3px; }
+  .pdur  { font-size:12px; color:#64748b; }
+  .underway-tag { background:#dcfce7; color:#166534; font-size:11px; font-weight:700; padding:3px 10px; border-radius:10px; margin-top:5px; display:inline-block; }
+  .milestones { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .m-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; }
+  .m-icon { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; margin-bottom:10px; }
+  .mi-blue   { background:#dbeafe; }
+  .mi-green  { background:#d1fae5; }
+  .mi-purple { background:#ede9fe; }
+  .mi-gold   { background:#fef3c7; }
+  .m-card strong { display:block; font-size:13.5px; font-weight:700; color:#0a1628; margin-bottom:4px; }
+  .m-card span   { font-size:12.5px; color:#64748b; line-height:1.55; }
+
+  /* ── ACCESS ─────────────────────────────────── */
+  .access-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .access-row { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .a-name   { font-size:14px; font-weight:700; color:#f1f5f9; margin-bottom:3px; }
+  .a-detail { font-size:12px; color:#94a3b8; }
+  .badge { padding:4px 12px; border-radius:20px; font-size:11.5px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+  .b-granted  { background:#d1fae5; color:#065f46; }
+  .b-tbd      { background:rgba(255,255,255,0.1); color:#94a3b8; }
+  .b-noaccess { background:rgba(239,68,68,0.2); color:#fca5a5; }
+  .b-notsetup { background:rgba(245,158,11,0.2); color:#fde68a; }
+  .b-poc      { background:rgba(139,92,246,0.2); color:#c4b5fd; }
+
+  /* ── OPEN ITEMS ─────────────────────────────── */
+  .open-item { background:#fff; border:1px solid #e2e8f0; border-left:5px solid var(--gold); border-radius:10px; padding:16px 22px; margin-bottom:13px; display:flex; align-items:flex-start; gap:16px; }
+  .open-num { background:var(--gold); color:#fff; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; margin-top:2px; }
+  .open-item strong { display:block; font-size:15px; font-weight:700; color:#0a1628; margin-bottom:4px; }
+  .open-item span   { font-size:13px; color:#64748b; line-height:1.6; }
+
+  /* ── THANK YOU ──────────────────────────────── */
+  .s-ty { background:var(--navy); justify-content:center; align-items:center; text-align:center; padding:80px; }
+  .ty-icon { font-size:56px; margin-bottom:24px; }
+  .s-ty h2 { font-size:clamp(42px,6vw,72px); font-weight:800; color:#fff; margin-bottom:16px; }
+  .s-ty p  { font-size:17px; color:#94a3b8; font-style:italic; margin-bottom:36px; }
+  .ty-card { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 48px; }
+  .ty-n { font-size:24px; font-weight:800; color:#fff; margin-bottom:5px; }
+  .ty-r { font-size:15px; color:#93c5fd; font-weight:500; }
+  .ty-t { font-size:13px; color:#64748b; margin-top:4px; }
+</style>
+</head>
+<body>
+
+<div class="progress-dots" id="dots"></div>
+<div class="deck" id="deck">
+
+<!-- ══ SLIDE 1: COVER ══ -->
+<div class="slide s-cover active">
+  <div class="cover-accent"></div>
+  <div class="cover-tags">
+    <div class="tag">Engagement Kickoff</div>
+    <div class="tag">Analytics Governance</div>
+  </div>
+  <h1>GA4, GTM &amp; <span>Tracking Governance Audit</span></h1>
+  <div class="divider"></div>
+  <p class="cover-sub">Marketing analytics, consent compliance, and tracking governance across Schlage Residential web properties</p>
+  <div class="cover-meta">
+    <div class="meta-item"><div class="ml">Client</div><div class="mv">Schlage — Residential Digital Marketing</div></div>
+    <div class="meta-item"><div class="ml">Prepared by</div><div class="mv">Allegion Web Team</div></div>
+    <div class="meta-item"><div class="ml">Analyst</div><div class="mv">Saurabh</div></div>
+    <div class="meta-item"><div class="ml">Statement of Work</div><div class="mv">No. 1 — Effective [Date]</div></div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 2: AGENDA ══ -->
+<div class="slide s-light">
+  <div class="label label-light">Kickoff Call</div>
+  <h2>Today's Agenda</h2>
+  <div class="agenda-grid">
+    <div class="agenda-item"><div class="agenda-num">1</div><div class="agenda-text"><strong>Welcome &amp; Introductions</strong><span>Team roles, engagement ownership, primary contacts on both sides</span></div></div>
+    <div class="agenda-item"><div class="agenda-num">2</div><div class="agenda-text"><strong>Engagement Overview</strong><span>Objectives, scope, what success looks like, and what is out of scope</span></div></div>
+    <div class="agenda-item"><div class="agenda-num">3</div><div class="agenda-text"><strong>Scope Deep-Dive</strong><span>3 properties + Shopify POC, 8 audit dimensions, GTM container walk-through</span></div></div>
+    <div class="agenda-item"><div class="agenda-num">4</div><div class="agenda-text"><strong>Dual Purchase Flow</strong><span>PriceSpider "Where to Buy" vs. Shopify checkout — the biggest tracking gap</span></div></div>
+    <div class="agenda-item"><div class="agenda-num">5</div><div class="agenda-text"><strong>Timeline &amp; Phasing</strong><span>Sequential property schedule, milestone checkpoints, synthesis session</span></div></div>
+    <div class="agenda-item"><div class="agenda-num">6</div><div class="agenda-text"><strong>Access &amp; Open Items</strong><span>Confirmed access, what's still needed, action items before we close</span></div></div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 3: ENGAGEMENT AT A GLANCE ══ -->
+<div class="slide s-dark">
+  <div class="label">Engagement Overview</div>
+  <h2>Engagement at a Glance</h2>
+  <p class="sub">A comprehensive GA4, GTM and consent compliance audit across Schlage's residential web presence — designed by Allegion Web Team for the Schlage Residential team</p>
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num">3</div><div class="stat-lbl">Web Properties<br/>+ Shopify POC</div></div>
+    <div class="stat-box"><div class="stat-num">2</div><div class="stat-lbl">GTM Containers<br/>K98NRXS7 · TNMQ8VX6</div></div>
+    <div class="stat-box"><div class="stat-num">8</div><div class="stat-lbl">Audit Dimensions<br/>Per property</div></div>
+    <div class="stat-box"><div class="stat-num">10–16</div><div class="stat-lbl">Weeks<br/>Sequential + synthesis</div></div>
+  </div>
+  <div class="two-col">
+    <div class="glance-box">
+      <h4>Objectives</h4>
+      <ul>
+        <li>Document a baseline of GTM implementation, GA4 configuration, and consent setup across all 3 Schlage residential properties</li>
+        <li>Identify tracking gaps — especially the dual purchase flow: PriceSpider WTB (mechanical locks) vs. Shopify checkout on shop.schlage.com (smart locks)</li>
+        <li>Standardise event taxonomy so US and Canada GA4 properties speak the same language — enabling cross-market comparison for the first time</li>
+      </ul>
+    </div>
+    <div class="glance-box hl">
+      <h4>What Success Looks Like</h4>
+      <ul>
+        <li>Governed GTM workflow — publish-controlled, consistent naming across both containers — managed via Azure DevOps</li>
+        <li>Consent Mode v2 verified per property — every tag confirmed to fire only after correct user consent</li>
+        <li>Shopify checkout POC validated — if feasible, purchase attribution flows back to GA4; if not, limitation documented</li>
+        <li>A single governed SDR and unified remediation roadmap delivered at synthesis session</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 4: PROBLEM / SOLUTION ══ -->
+<div class="slide s-navy">
+  <div class="label">Engagement Overview</div>
+  <h2>Consolidate, Standardise, Govern</h2>
+  <p class="sub">Schlage's tracking spans two GTM containers, two regional domains, and two completely different purchase flows — currently managed independently with no shared standards.</p>
+  <div class="ps-grid">
+    <div class="prob-col">
+      <div class="col-title">⚠ Where Things Stand</div>
+      <div class="ps-item"><span class="psdot"></span>Two GTM containers (GTM-K98NRXS7 &amp; GTM-TNMQ8VX6) built and maintained independently — no shared naming conventions or publish governance</div>
+      <div class="ps-item"><span class="psdot"></span>GA4 properties for schlage.com and schlage.ca have divergent event names — cross-market reporting is not directly comparable</div>
+      <div class="ps-item"><span class="psdot"></span>shop.schlage.com (Shopify) — checkout steps, address entry, and payment have no adequate tracking today</div>
+      <div class="ps-item"><span class="psdot"></span>Google Ads: no current access to verify conversion tracking accuracy or duplicate counting</div>
+      <div class="ps-item"><span class="psdot"></span>BigQuery and Looker Studio not yet configured — raw event data being permanently deleted on GA4's 14-month rolling window</div>
+    </div>
+    <div class="arrow-mid"><div class="arrow-circle">→</div></div>
+    <div class="sol-col">
+      <div class="col-title">✓ Where This Leads</div>
+      <div class="ps-item"><span class="psdot"></span>Unified GTM architecture — shared naming, folder structure, and Azure DevOps-managed publish workflow across both containers</div>
+      <div class="ps-item"><span class="psdot"></span>Consistent GA4 event taxonomy — same event names, parameter names, and conversion definitions across US and Canada</div>
+      <div class="ps-item"><span class="psdot"></span>Shopify checkout POC — feasibility confirmed first; if viable, purchase attribution flows back to GA4 via cross-domain stitching</div>
+      <div class="ps-item"><span class="psdot"></span>Google Ads conversion tracking validated — no duplicate firing, smart bidding optimising on clean data</div>
+      <div class="ps-item"><span class="psdot"></span>BigQuery export enabled + Looker Studio baseline — raw data preserved and cross-property reporting available for the first time</div>
+    </div>
+  </div>
+  <div class="quote-bar">"The audit is the bridge. You cannot consolidate what has not first been documented. This engagement produces the baseline and the remediation plan — implementation follows as a separate phase."</div>
+</div>
+
+<!-- ══ SLIDE 5: PROPERTIES ══ -->
+<div class="slide s-table">
+  <div class="label label-light">Scope Deep-Dive · 1 of 3</div>
+  <h2>Properties in Scope</h2>
+  <p class="sub">Audited sequentially. Findings presented at completion of each property before the next begins.</p>
+  <table class="prop-table">
+    <thead><tr><th>Phase</th><th>Property</th><th>GTM Container</th><th>Priority</th><th>Duration</th></tr></thead>
+    <tbody>
+      <tr class="primary-row">
+        <td><div class="phase-badge">1</div></td>
+        <td><strong>schlage.com</strong><br/><span style="font-size:12px;color:#64748b">US Residential</span></td>
+        <td><code class="d">GTM-K98NRXS7</code></td>
+        <td><span class="pill primary">Primary</span></td>
+        <td>4–6 weeks</td>
+      </tr>
+      <tr>
+        <td><div class="phase-badge">2</div></td>
+        <td><strong>schlage.ca/en</strong><br/><span style="font-size:12px;color:#64748b">Canada — English</span></td>
+        <td><code class="d">GTM-TNMQ8VX6</code></td>
+        <td><span class="pill high">High</span></td>
+        <td>3–4 weeks</td>
+      </tr>
+      <tr>
+        <td><div class="phase-badge">3</div></td>
+        <td><strong>schlage.ca/fr</strong><br/><span style="font-size:12px;color:#64748b">Canada — French · Law 25</span></td>
+        <td><code class="d">GTM-TNMQ8VX6</code> <span style="font-size:11px;color:#94a3b8">(shared)</span></td>
+        <td><span class="pill high">High</span></td>
+        <td>2–3 weeks</td>
+      </tr>
+      <tr>
+        <td><div class="phase-badge tbd">◎</div></td>
+        <td><strong>shop.schlage.com</strong><br/><span style="font-size:12px;color:#64748b">Shopify Checkout — POC first</span></td>
+        <td>Shopify Web Pixels</td>
+        <td><span class="pill poc">POC First</span></td>
+        <td>TBD after POC</td>
+      </tr>
+      <tr>
+        <td><div class="phase-badge gold">✦</div></td>
+        <td><strong>Synthesis Session</strong><br/><span style="font-size:12px;color:#64748b">Cross-property consolidation</span></td>
+        <td>—</td><td>—</td><td>After Phase 3</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="why-box">
+    <div class="why-item"><strong>Why Sequential?</strong><span>schlage.ca shares one container (GTM-TNMQ8VX6) for both EN and FR. Standards from schlage.com (Phase 1) are applied directly in both CA phases — each audit builds on the last.</span></div>
+    <div class="why-item"><strong>Shopify — POC Approach</strong><span>shop.schlage.com checkout tracking is attempted as a POC. If Shopify permits it, full instrumentation is scoped. If restrictions prevent adequate tracking, the limitation is documented and alternatives proposed.</span></div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 6: 8 DIMENSIONS ══ -->
+<div class="slide s-dim">
+  <div class="label">Scope Deep-Dive · 2 of 3</div>
+  <h2>Eight Audit Dimensions, Per Property</h2>
+  <div class="dim-grid">
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-blue">🏷</div><h4>Google Tag Manager</h4></div>
+      <p>Container audit for GTM-K98NRXS7 (schlage.com) &amp; GTM-TNMQ8VX6 (schlage.ca). Tag inventory, trigger &amp; variable naming, publish workflow, Consent Mode config, access control, version history.</p>
+      <p class="dim-key">Are tags firing at the right time — and is publishing controlled or open to all?</p>
+    </div>
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-green">📊</div><h4>Google Analytics 4</h4></div>
+      <p>Property config, data streams, event taxonomy, data retention, attribution model, filters (IP, bot), conversion definitions, audience setup, linked products. US vs. CA consistency check.</p>
+      <p class="dim-key">Are event names and conversion definitions consistent across US and Canada?</p>
+    </div>
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-gold">🛒</div><h4>Dual Purchase Flow</h4></div>
+      <p>PriceSpider "Where to Buy" (mechanical locks) vs. Shopify on shop.schlage.com (smart locks). Cross-domain session stitching, cart/checkout/purchase funnel, retailer-click capture.</p>
+      <p class="dim-key">Can we attribute Smart Lock purchases back to the marketing channel that drove them?</p>
+    </div>
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-red">🔒</div><h4>Consent Management</h4></div>
+      <p>OneTrust configuration, Consent Mode v2 signals in GTM, tag firing before vs. after consent, per-property banner differences, GDPR / CCPA / Quebec Law 25 posture for CA properties.</p>
+      <p class="dim-key">Are GA4 and Google Ads tags blocked until the user accepts — on every property?</p>
+    </div>
+    <div class="dim-card" style="background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3)">
+      <div class="dim-hdr"><div class="dim-icon ic-gold">📣</div><h4>Google Ads</h4></div>
+      <p>Conversion action audit, duplicate conversion detection (GTM tag vs. GA4 import), GCLID auto-tagging, audience list linking, smart bidding data quality.</p>
+      <p class="dim-key" style="color:#fcd34d">⚠ No account access yet — access request open. Observation-based until granted.</p>
+    </div>
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-teal">🔎</div><h4>Google Search Console</h4></div>
+      <p>Property verification (access confirmed), GA4 linkage status, organic keyword data flow, sitemap submission health, Core Web Vitals scores, crawl coverage.</p>
+      <p class="dim-key">Is organic keyword data flowing into GA4 — and are Core Web Vitals impacting rankings?</p>
+    </div>
+    <div class="dim-card" style="background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.3)">
+      <div class="dim-hdr"><div class="dim-icon ic-purple">🗄</div><h4>BigQuery &amp; Looker Studio</h4></div>
+      <p>GA4 BigQuery export — not yet configured. Raw event data is being deleted on GA4's 14-month window. Looker Studio baseline not yet built. Cross-property reporting layer design.</p>
+      <p class="dim-key" style="color:#c4b5fd">Every day without BigQuery = one day of raw data permanently lost. Enable immediately.</p>
+    </div>
+    <div class="dim-card">
+      <div class="dim-hdr"><div class="dim-icon ic-red">🛡</div><h4>Content Security Policy</h4></div>
+      <p>CSP header analysis — GTM, GA4, PriceSpider, Shopify domains. Tags loading outside GTM bypassing consent. Nonce/hash config. Silent tag failures from CSP rejections.</p>
+      <p class="dim-key">Are analytics tags silently failing because of CSP — with nobody aware?</p>
+    </div>
+  </div>
+  <div class="dim-bonus">
+    <div class="dim-bonus-lbl">➕ Observation</div>
+    <p>Where Adobe Analytics runs in parallel with GA4, we verify whether AA reports higher sessions, identify the most likely cause (consent handling, bot filtering differences), and document the discrepancy. <em>Informational only — not a migration roadmap.</em></p>
+  </div>
+</div>
+
+<!-- ══ SLIDE 7: DUAL PURCHASE FLOW ══ -->
+<div class="slide s-flow">
+  <div class="label">Scope Deep-Dive · Focus Area</div>
+  <h2>The Dual Purchase Flow — Schlage's Biggest Tracking Gap</h2>
+  <p class="sub">Two completely different paths to purchase. Neither is fully instrumented end-to-end. Attribution is incomplete for both.</p>
+  <div class="flows-grid">
+    <div class="flow-box fa">
+      <div class="flow-hdr"><span class="flow-badge a">Flow A</span><h4>PriceSpider "Where to Buy"</h4></div>
+      <p class="flow-products">Mechanical Locks: Knobs, Levers, Deadbolts, Handlesets, Electronic Locks</p>
+      <div class="flow-steps">
+        <div class="flow-step"><div class="step-num step-a">1</div>User on Product Detail Page (PDP)</div>
+        <div class="flow-step"><div class="step-num step-a">2</div>Clicks "Buy Now" / "Where to Buy" — <strong style="color:#fcd34d">tracked ✅</strong></div>
+        <div class="flow-step"><div class="step-num step-a">3</div>PriceSpider widget opens — retailer list shown</div>
+        <div class="flow-step"><div class="step-num step-a">4</div>User selects retailer (Home Depot, Amazon, Lowe's)</div>
+        <div class="flow-step"><div class="step-num step-a">5</div>User exits to retailer site — <strong style="color:#fca5a5">session ends here ✗</strong></div>
+      </div>
+      <div class="flow-warn"><strong>Gap:</strong> Zero data after retailer click. Did the Amazon visit convert? Which retailer has the best conversion rate? Unknown.</div>
+      <div class="flow-tip"><strong>PriceSpider Dashboard:</strong> Provides click analytics by retailer, product, and geography — tells us WHERE users go but NOT whether they bought. Post-purchase data requires a separate approach per retailer.</div>
+      <div class="flow-poc"><strong>Amazon Attribution (investigate):</strong> If Schlage has Amazon Brand Registry, Attribution tags can be added to WTB links — surfacing Add-to-Cart and Purchase data back from Amazon.</div>
+    </div>
+    <div class="flow-box fb">
+      <div class="flow-hdr"><span class="flow-badge b">Flow B</span><h4>Shopify Checkout — shop.schlage.com</h4></div>
+      <p class="flow-products">Smart Locks: Encode™, Encode Plus™, Sense Pro™, Arrive™, Connect™</p>
+      <div class="flow-steps">
+        <div class="flow-step"><div class="step-num step-b">1</div>User on Smart Lock product page (schlage.com)</div>
+        <div class="flow-step"><div class="step-num step-b">2</div>Selects variant (finish / colour)</div>
+        <div class="flow-step"><div class="step-num step-b">3</div>Clicks "Add to Cart" — <strong style="color:#6ee7b7">tracked ✅</strong></div>
+        <div class="flow-step"><div class="step-num step-b">4</div>Shopify opens on shop.schlage.com — <strong style="color:#fcd34d">cross-domain ⚠</strong></div>
+        <div class="flow-step"><div class="step-num step-b">5</div>Address &amp; shipping entry — <strong style="color:#fca5a5">no tracking ✗</strong></div>
+        <div class="flow-step"><div class="step-num step-b">6</div>Payment step — <strong style="color:#fca5a5">no tracking ✗</strong></div>
+        <div class="flow-step"><div class="step-num step-b">7</div>Order confirmed — <strong style="color:#fca5a5">no purchase event ✗</strong></div>
+      </div>
+      <div class="flow-warn"><strong>Gap:</strong> Checkout steps and purchase confirmation have no tracking. GA4 session breaks at the domain switch. Revenue is invisible.</div>
+      <div class="flow-poc"><strong>📋 POC Approach:</strong> Validate first whether Shopify Web Pixels allows adequate checkout tracking. If yes — full instrumentation scoped. If Shopify restricts it — limitation documented and alternatives proposed.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 8: GOVERNANCE ══ -->
+<div class="slide s-light">
+  <div class="label label-light">Scope Deep-Dive · 3 of 3</div>
+  <h2>Governance Framework &amp; Boundaries</h2>
+  <div class="gov-grid">
+    <div class="gov-col gov-in">
+      <h3>✓ In Scope — Governance Framework</h3>
+      <div class="gov-item"><strong>🔑 Access Control</strong><span>Transition both GTM containers to view-only for agencies and stakeholders. Publishing restricted to named, approved publishers only — tracked in Azure DevOps.</span></div>
+      <div class="gov-item"><strong>📋 Change Management</strong><span>Azure DevOps–based workflow: all tracking requests — new events, tag changes, campaign parameters — logged, reviewed, and approved before reaching any production container.</span></div>
+      <div class="gov-item"><strong>📁 Documentation Standards</strong><span>Naming conventions, GTM folder structures, event taxonomy, and a Solution Design Reference (SDR) that applies consistently across all 3 properties and both containers.</span></div>
+    </div>
+    <div class="gov-col gov-out">
+      <h3>✗ Explicitly Out of Scope</h3>
+      <div class="oos-table">
+        <div class="oos-row"><div class="oos-lbl">Implementation &amp; Remediation</div><div class="oos-why">Estimated and scoped separately after audit delivery. The audit documents the gaps — implementation is the next phase.</div></div>
+        <div class="oos-row"><div class="oos-lbl">Google Ads — Full Audit</div><div class="oos-why">No account access yet. Observation-based only. Full conversion audit requires advertiser-level read access.</div></div>
+        <div class="oos-row"><div class="oos-lbl">BigQuery / Looker Studio Build</div><div class="oos-why">Audit covers what should be configured. Actual GCP setup and dashboard build is a separate Phase 2 deliverable.</div></div>
+        <div class="oos-row"><div class="oos-lbl">Authenticated / Gated Areas</div><div class="oos-why">Dealer portals, account login areas. Public-facing pages only in scope.</div></div>
+        <div class="oos-row"><div class="oos-lbl">Shopify — If POC Fails</div><div class="oos-why">If Shopify's platform does not support adequate checkout tracking, this is documented. No forced implementation.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 9: AZURE DEVOPS WORKFLOW ══ -->
+<div class="slide s-dark">
+  <div class="label">Change Management</div>
+  <h2>How Azure DevOps Runs Tracking Governance</h2>
+  <p class="sub">Once GTM containers are standardised, publishing is access-controlled and all stakeholders move to view-only. Azure DevOps becomes the single front door for every tracking change.</p>
+  <div class="workflow">
+    <div class="wf-step"><div class="wf-icon">📥</div><h4>Intake</h4><p>New campaign, event, or site update submitted as an Azure DevOps work item with event name, trigger, property, container, and business reason</p></div>
+    <div class="wf-step"><div class="wf-icon">🔎</div><h4>Triage</h4><p>Assessed against governance standards: naming convention compliant? Which container (K98NRXS7 or TNMQ8VX6)? Consent category? Priority?</p></div>
+    <div class="wf-step"><div class="wf-icon">🛠</div><h4>Build &amp; QA</h4><p>Implemented in GTM dev workspace. Tested with GA4 DebugView + GTM Preview mode. Validated against event taxonomy and SDR.</p></div>
+    <div class="wf-step"><div class="wf-icon">🚀</div><h4>Publish</h4><p>Published by approved publisher only. Every container version traceable to an Azure DevOps work item, a date, and a named owner.</p></div>
+    <div class="wf-step"><div class="wf-icon">🗓</div><h4>Audit Trail</h4><p>Quarterly GTM version review: what changed, who changed it, consent compliance status, impact on data quality.</p></div>
+  </div>
+  <div class="jira-quote">"Tracking estates drift because changes arrive through side channels — a Teams message, an agency with publish rights, a one-off tag under deadline. Standardisation without a request process simply re-fragments within the year. Azure DevOps is the mechanism that holds the governance in place."</div>
+</div>
+
+<!-- ══ SLIDE 10: TIMELINE ══ -->
+<div class="slide s-light">
+  <div class="label label-light">Sequential Delivery</div>
+  <h2>Timeline &amp; Phasing</h2>
+  <p class="sub">Effective [Start Date]. Durations assume timely access and feedback — delays in either extend the delivery window.</p>
+  <div class="phase-track">
+    <div class="phase-node">
+      <div class="phase-circle pc-active">1</div>
+      <div class="pname">schlage.com</div>
+      <div class="pdur">4–6 weeks</div>
+      <span class="underway-tag">🔄 Underway</span>
+    </div>
+    <div class="phase-node">
+      <div class="phase-circle pc-upcoming">2</div>
+      <div class="pname">schlage.ca/en</div>
+      <div class="pdur">3–4 weeks</div>
+    </div>
+    <div class="phase-node">
+      <div class="phase-circle pc-upcoming">3</div>
+      <div class="pname">schlage.ca/fr</div>
+      <div class="pdur">2–3 weeks</div>
+    </div>
+    <div class="phase-node">
+      <div class="phase-circle pc-poc">◎</div>
+      <div class="pname">Shopify POC</div>
+      <div class="pdur">TBD — parallel</div>
+    </div>
+    <div class="phase-node">
+      <div class="phase-circle pc-synth">✦</div>
+      <div class="pname">Synthesis</div>
+      <div class="pdur">After Phase 3</div>
+    </div>
+  </div>
+  <div class="milestones">
+    <div class="m-card"><div class="m-icon mi-blue">🏁</div><strong>Milestone Checkpoint</strong><span>Findings walkthrough at close of each property audit — held live with the Schlage residential team before next phase begins</span></div>
+    <div class="m-card"><div class="m-icon mi-green">📋</div><strong>Deliverable Per Phase</strong><span>Documented audit report covering all 8 dimensions for that property, with severity ratings and remediation priority order</span></div>
+    <div class="m-card"><div class="m-icon mi-purple">🔗</div><strong>Cross-Property View</strong><span>Synthesis session consolidates all findings — naming standards, governance SDR, and a unified remediation roadmap across all 3 properties</span></div>
+    <div class="m-card"><div class="m-icon mi-gold">✅</div><strong>Estimated Completion</strong><span>~10–16 weeks total. Azure DevOps governance retainer and implementation scoping follows as Phase 2.</span></div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 11: ACCESS CHECKLIST ══ -->
+<div class="slide s-dark">
+  <div class="label">Confirmation Pass</div>
+  <h2>Access &amp; Onboarding Checklist</h2>
+  <p class="sub">Confirming what is already provisioned and putting a name and date against anything still open before the kickoff call closes.</p>
+  <div class="access-grid">
+    <div class="access-row"><div><div class="a-name">GTM — GTM-K98NRXS7 (schlage.com)</div><div class="a-detail">Publish access — container confirmed</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">OneTrust</div><div class="a-detail">Consent management platform — admin access</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">GTM — GTM-TNMQ8VX6 (schlage.ca)</div><div class="a-detail">Publish access — EN &amp; FR shared container</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">Google Search Console</div><div class="a-detail">Owner / full user — all 3 domains</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">GA4 — schlage.com Property</div><div class="a-detail">Editor / admin — property and stream access</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">Google Ads</div><div class="a-detail">Read access — accounts linked to schlage.com &amp; schlage.ca</div></div><div class="badge b-noaccess">✗ No Access</div></div>
+    <div class="access-row"><div><div class="a-name">GA4 — schlage.ca Property</div><div class="a-detail">Editor / admin — property and stream access</div></div><div class="badge b-granted">✓ Granted</div></div>
+    <div class="access-row"><div><div class="a-name">BigQuery — GCP Project</div><div class="a-detail">Project viewer — to enable GA4 raw export</div></div><div class="badge b-notsetup">Not Set Up</div></div>
+    <div class="access-row"><div><div class="a-name">PriceSpider Analytics Dashboard</div><div class="a-detail">Click data by retailer, product, geography</div></div><div class="badge b-tbd">TBD</div></div>
+    <div class="access-row"><div><div class="a-name">Shopify Admin — shop.schlage.com</div><div class="a-detail">Customer Events / Web Pixels — for checkout POC</div></div><div class="badge b-poc">POC — TBD</div></div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 12: OPEN ITEMS ══ -->
+<div class="slide s-light">
+  <div class="label label-light">Before We Close...</div>
+  <h2>Open Items</h2>
+  <div class="open-item"><div class="open-num">1</div><div><strong>Google Ads account access — schlage.com &amp; schlage.ca</strong><span>Read access needed to audit conversion actions, auto-tagging (GCLID), audience linking, and smart bidding data quality. Without access, Google Ads dimension is observation-based only.</span></div></div>
+  <div class="open-item"><div class="open-num">2</div><div><strong>Shopify Admin access — shop.schlage.com checkout POC</strong><span>Need Customer Events / Web Pixels access to test checkout tracking feasibility. If platform supports it — full instrumentation scoped. If not — documented and alternatives proposed.</span></div></div>
+  <div class="open-item"><div class="open-num">3</div><div><strong>PriceSpider Analytics dashboard access</strong><span>PriceSpider provides a click analytics platform (retailer clicks, product clicks, geography). Confirm access is available. Separately, investigate Amazon Attribution tags on WTB links to surface post-click purchase data from Amazon.</span></div></div>
+  <div class="open-item"><div class="open-num">4</div><div><strong>BigQuery GCP project — enable GA4 raw export immediately</strong><span>GA4 deletes raw event data after 14 months on a rolling basis. A GCP project needs to be provisioned and BigQuery export enabled as a priority action — independent of the audit timeline.</span></div></div>
+  <div class="open-item"><div class="open-num">5</div><div><strong>GA4 property IDs for all 3 domains</strong><span>Confirm GA4 property IDs and measurement IDs for schlage.com, schlage.ca/en, and schlage.ca/fr — and whether all three share one GA4 property or have separate properties with cross-domain linking configured.</span></div></div>
+</div>
+
+<!-- ══ SLIDE 13: THANK YOU ══ -->
+<div class="slide s-ty">
+  <div class="ty-icon">🔒</div>
+  <h2>Thank You</h2>
+  <p>Questions before we close out the action items?</p>
+  <div class="ty-card">
+    <div class="ty-n">Saurabh</div>
+    <div class="ty-r">Web Analyst</div>
+    <div class="ty-t">Allegion Web Team — Schlage Residential</div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<div class="controls">
+  <button id="prevBtn" onclick="go(-1)" disabled>←</button>
+  <span class="slide-counter" id="ctr">1 / 13</span>
+  <button id="nextBtn" onclick="go(1)">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide')
+  const total  = slides.length
+  let cur = 0
+
+  const dotsEl = document.getElementById('dots')
+  slides.forEach((_,i) => {
+    const d = document.createElement('div')
+    d.className = 'dot'
+    d.title = 'Slide '+(i+1)
+    d.addEventListener('click', ()=>goTo(i))
+    dotsEl.appendChild(d)
+  })
+
+  function goTo(n) {
+    slides[cur].classList.remove('active')
+    cur = n
+    slides[cur].classList.add('active')
+    document.getElementById('ctr').textContent = (cur+1)+' / '+total
+    document.getElementById('prevBtn').disabled = cur===0
+    document.getElementById('nextBtn').disabled = cur===total-1
+    document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('active',i===cur))
+  }
+  function go(d) { const n=cur+d; if(n>=0&&n<total) goTo(n) }
+
+  // Initialise on every load/reload
+  goTo(0)
+
+  document.addEventListener('keydown', e=>{
+    if(['ArrowRight','ArrowDown',' '].includes(e.key)){e.preventDefault();go(1)}
+    else if(['ArrowLeft','ArrowUp'].includes(e.key)){e.preventDefault();go(-1)}
+  })
+  let sx=0
+  document.addEventListener('touchstart',e=>{sx=e.touches[0].clientX})
+  document.addEventListener('touchend',e=>{const d=sx-e.changedTouches[0].clientX;if(Math.abs(d)>50)go(d>0?1:-1)})
+</script>
+</body>
+</html>
